@@ -1,7 +1,7 @@
-name = "shortlink-ku-pro"
+name = "vlinkgo"
 main = "src/worker.js"
 compatibility_date = "2026-11-17"
 
 [[kv_namespaces]]
 binding = "SHORTLINKS"
-id = "4a63da29697c47ce900977d2499489bb"
+id = "1fdaaf6379404c19b823c82532a633e5"
