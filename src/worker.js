@@ -40,20 +40,23 @@ copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(
 
 const MIGRATION_HTML = `<!doctype html>
 <html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pemindahan KV VLinkGo</title>
+<title>Pemeriksaan dan pemindahan KV VLinkGo</title>
 <body style="font:16px Arial;max-width:560px;margin:40px auto;padding:20px;color:#172033">
-<h2>Pemindahan data shortlink</h2>
-<p>Masukkan MIGRATION_SECRET yang sudah disimpan di Cloudflare. Proses ini hanya menyalin data; KV lama tidak dihapus.</p>
+<h2>Pemeriksaan data shortlink</h2>
+<p>Masukkan MIGRATION_SECRET. Pemeriksaan hanya membaca KV lama dan baru, tidak mengubah data.</p>
 <input id="secret" type="password" autocomplete="off" placeholder="MIGRATION_SECRET" style="width:100%;padding:13px;box-sizing:border-box">
+<button id="audit" style="margin-top:12px;padding:13px;width:100%">Periksa kecocokan data lama</button>
 <button id="go" style="margin-top:12px;padding:13px;width:100%">Mulai pemindahan</button>
 <pre id="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
 <script>
-const btn=document.getElementById('go'),secret=document.getElementById('secret'),status=document.getElementById('status');
-btn.onclick=async()=>{const key=secret.value;if(!key){status.textContent='Masukkan secret terlebih dahulu.';return}
-btn.disabled=true;let cursor='',total=0;
-try{while(true){status.textContent='Sedang menyalin '+total+' data...';const r=await fetch('/__migrate',{method:'POST',headers:{'Authorization':'Bearer '+key,'content-type':'application/json'},body:JSON.stringify({cursor})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Pemindahan gagal');total+=d.copied||0;if(d.done){status.textContent='Selesai. Data disalin: '+total+'. Periksa KV SHORTLINKS sebelum menghapus apa pun.';break}cursor=d.cursor||'';}}
-catch(e){status.textContent='Terhenti setelah '+total+' data. '+e.message+'. Tekan mulai lagi untuk mencoba ulang.'}
-finally{btn.disabled=false;secret.value='';}};
+const audit=document.getElementById("audit"),btn=document.getElementById("go"),secret=document.getElementById("secret"),status=document.getElementById("status");
+async function run(path){const key=secret.value;if(!key){status.textContent="Masukkan secret terlebih dahulu.";return}
+audit.disabled=true;btn.disabled=true;let cursor="",checked=0,matched=0,missing=0,mismatch=0,copied=0,alreadyPresent=0;
+try{while(true){status.textContent="Sedang memeriksa "+checked+" data...";const r=await fetch(path,{method:"POST",headers:{"Authorization":"Bearer "+key,"content-type":"application/json"},body:JSON.stringify({cursor})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Proses gagal");
+checked+=d.checked||0;matched+=d.matched||0;missing+=d.missing||0;mismatch+=d.mismatch||0;copied+=d.copied||0;alreadyPresent+=d.alreadyPresent||0;
+if(d.done){status.textContent=path==="/__audit"?"Pemeriksaan selesai. Data lama diperiksa: "+checked+". Cocok: "+matched+". Belum ada: "+missing+". Tujuan berbeda: "+mismatch+".":"Selesai. Baru disalin: "+copied+". Sudah ada: "+alreadyPresent+".";break}cursor=d.cursor||"";}}
+catch(e){status.textContent="Terhenti setelah "+checked+" data. "+e.message+". Coba ulang."}finally{audit.disabled=false;btn.disabled=false;secret.value="";}}
+audit.onclick=()=>run("/__audit");btn.onclick=()=>run("/__migrate");
 </script></body></html>`;
 
 const BLOCKED_HOSTS = new Set(["localhost","localhost.localdomain"]);
@@ -74,6 +77,25 @@ export default {
   const url=new URL(request.url);
   if(request.method==="GET" && url.pathname==="/__migrate-ui"){
    return new Response(MIGRATION_HTML,{headers:{"content-type":"text/html;charset=UTF-8","cache-control":"no-store","referrer-policy":"no-referrer","content-security-policy":"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}});
+  }
+  if(request.method==="POST" && url.pathname==="/__audit"){
+   if(!env.MIGRATION_SECRET || request.headers.get("authorization")!=="Bearer "+env.MIGRATION_SECRET)return json({error:"Tidak diizinkan."},401);
+   if(!env.OLD_CF_API_TOKEN || !env.SHORTLINKS)return json({error:"Secret token lama atau binding KV belum dikonfigurasi."},500);
+   let body;try{body=await request.json()}catch{return json({error:"Permintaan tidak valid."},400)}
+   const apiBase="https://api.cloudflare.com/client/v4/accounts/6b32ccf477cae5b538a755799c17f8ac/storage/kv/namespaces/1fdaaf6379404c19b823c82532a633e5";
+   const params=new URLSearchParams({limit:"20"});if(typeof body.cursor==="string" && body.cursor)params.set("cursor",body.cursor);
+   const listRes=await fetch(apiBase+"/keys?"+params.toString(),{headers:{"authorization":"Bearer "+env.OLD_CF_API_TOKEN}});
+   if(!listRes.ok)return json({error:"Gagal membaca daftar KV lama (HTTP "+listRes.status+")."},502);
+   const listData=await listRes.json();if(!listData.success || !Array.isArray(listData.result))return json({error:"Respons daftar KV lama tidak valid."},502);
+   let matched=0,missing=0,mismatch=0;
+   for(const item of listData.result){
+    const valueRes=await fetch(apiBase+"/values/"+encodeURIComponent(item.name),{headers:{"authorization":"Bearer "+env.OLD_CF_API_TOKEN}});
+    if(!valueRes.ok)return json({error:"Gagal membaca nilai KV lama (HTTP "+valueRes.status+")."},502);
+    const oldValue=await valueRes.text(),newValue=await env.SHORTLINKS.get(item.name);
+    if(newValue===null)missing++;else if(newValue!==oldValue)mismatch++;else matched++;
+   }
+   const nextCursor=listData.result_info && listData.result_info.cursor ? listData.result_info.cursor : null;
+   return json({checked:listData.result.length,matched,missing,mismatch,done:!nextCursor,cursor:nextCursor});
   }
   if(request.method==="POST" && url.pathname==="/__migrate"){
    if(!env.MIGRATION_SECRET || request.headers.get("authorization")!=="Bearer "+env.MIGRATION_SECRET)return json({error:"Tidak diizinkan."},401);
