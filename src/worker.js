@@ -141,7 +141,14 @@ export default {
    const code=url.pathname.slice(1);
    if(/^[a-f0-9]{10}$/.test(code) && env.SHORTLINKS){
     const destination=await env.SHORTLINKS.get(code);
-    if(destination){return new Response(null,{status:302,headers:{"location":destination,"cache-control":"no-store","referrer-policy":"no-referrer"}})}
+    if(destination){
+     // Do not let Facebook generate a destination-page preview for shortlinks.
+     const ua=request.headers.get("user-agent")||"";
+     if(/facebookexternalhit|Facebot/i.test(ua)){
+      return new Response(null,{status:204,headers:{"cache-control":"no-store","x-content-type-options":"nosniff"}});
+     }
+     return new Response(null,{status:302,headers:{"location":destination,"cache-control":"no-store","referrer-policy":"no-referrer"}});
+    }
    }
   }
   return new Response("Halaman tidak ditemukan.",{status:404,headers:{"content-type":"text/plain;charset=UTF-8"}});
