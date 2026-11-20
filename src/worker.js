@@ -90,9 +90,19 @@ export default {
     if(!valueRes.ok)throw new Error("Gagal membaca salah satu data KV (HTTP "+valueRes.status+").");
     return {key:item.name,value:await valueRes.text()};
    }));
-   await Promise.all(values.map(item=>env.SHORTLINKS.put(item.key,item.value)));
+   let copied=0,alreadyPresent=0;
+   for(const item of values){
+    const existing=await env.SHORTLINKS.get(item.key);
+    if(existing!==null){
+     if(existing!==item.value)return json({error:"Ada kode yang sudah terpakai dengan tujuan berbeda. Tidak ada data lama yang ditimpa; hentikan dan periksa konflik."},409);
+     alreadyPresent++;
+    }else{
+     await env.SHORTLINKS.put(item.key,item.value);
+     copied++;
+    }
+   }
    const nextCursor=listData.result_info && listData.result_info.cursor ? listData.result_info.cursor : null;
-   return json({copied:values.length,done:!nextCursor,cursor:nextCursor});
+   return json({copied,alreadyPresent,done:!nextCursor,cursor:nextCursor});
   }
   if(request.method==="GET" && url.pathname==="/") return new Response(HTML,{headers:{"content-type":"text/html;charset=UTF-8","x-content-type-options":"nosniff","referrer-policy":"no-referrer","content-security-policy":"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}});
   if(request.method==="POST" && url.pathname==="/api/shorten"){
