@@ -38,6 +38,24 @@ catch(err){alert(err.message)}finally{submit.disabled=false;submit.textContent='
 copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(short.href);copy.textContent='Tersalin!';setTimeout(()=>copy.textContent='Salin tautan',1600)}catch{alert('Salin alamat tautan secara manual.')}});
 </script></main></body></html>`;
 
+const MIGRATION_HTML = `<!doctype html>
+<html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pemindahan KV VLinkGo</title>
+<body style="font:16px Arial;max-width:560px;margin:40px auto;padding:20px;color:#172033">
+<h2>Pemindahan data shortlink</h2>
+<p>Masukkan MIGRATION_SECRET yang sudah disimpan di Cloudflare. Proses ini hanya menyalin data; KV lama tidak dihapus.</p>
+<input id="secret" type="password" autocomplete="off" placeholder="MIGRATION_SECRET" style="width:100%;padding:13px;box-sizing:border-box">
+<button id="go" style="margin-top:12px;padding:13px;width:100%">Mulai pemindahan</button>
+<pre id="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+<script>
+const btn=document.getElementById('go'),secret=document.getElementById('secret'),status=document.getElementById('status');
+btn.onclick=async()=>{const key=secret.value;if(!key){status.textContent='Masukkan secret terlebih dahulu.';return}
+btn.disabled=true;let cursor='',total=0;
+try{while(true){status.textContent='Sedang menyalin '+total+' data...';const r=await fetch('/__migrate',{method:'POST',headers:{'Authorization':'Bearer '+key,'content-type':'application/json'},body:JSON.stringify({cursor})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Pemindahan gagal');total+=d.copied||0;if(d.done){status.textContent='Selesai. Data disalin: '+total+'. Periksa KV SHORTLINKS sebelum menghapus apa pun.';break}cursor=d.cursor||'';}}
+catch(e){status.textContent='Terhenti setelah '+total+' data. '+e.message+'. Tekan mulai lagi untuk mencoba ulang.'}
+finally{btn.disabled=false;secret.value='';}};
+</script></body></html>`;
+
 const BLOCKED_HOSTS = new Set(["localhost","localhost.localdomain"]);
 function validateUrl(value) {
   let u;
@@ -54,6 +72,28 @@ function randomCode(){const bytes=new Uint8Array(7);crypto.getRandomValues(bytes
 export default {
  async fetch(request,env){
   const url=new URL(request.url);
+  if(request.method==="GET" && url.pathname==="/__migrate-ui"){
+   return new Response(MIGRATION_HTML,{headers:{"content-type":"text/html;charset=UTF-8","cache-control":"no-store","referrer-policy":"no-referrer","content-security-policy":"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}});
+  }
+  if(request.method==="POST" && url.pathname==="/__migrate"){
+   if(!env.MIGRATION_SECRET || request.headers.get("authorization")!=="Bearer "+env.MIGRATION_SECRET)return json({error:"Tidak diizinkan."},401);
+   if(!env.OLD_CF_API_TOKEN || !env.SHORTLINKS)return json({error:"Secret token lama atau binding KV belum dikonfigurasi."},500);
+   let body;try{body=await request.json()}catch{return json({error:"Permintaan tidak valid."},400)}
+   const apiBase="https://api.cloudflare.com/client/v4/accounts/6b32ccf477cae5b538a755799c17f8ac/storage/kv/namespaces/1fdaaf6379404c19b823c82532a633e5";
+   const params=new URLSearchParams({limit:"20"});if(typeof body.cursor==="string" && body.cursor)params.set("cursor",body.cursor);
+   const listRes=await fetch(apiBase+"/keys?"+params.toString(),{headers:{"authorization":"Bearer "+env.OLD_CF_API_TOKEN}});
+   if(!listRes.ok)return json({error:"Gagal membaca daftar KV lama (HTTP "+listRes.status+")."},502);
+   const listData=await listRes.json();if(!listData.success || !Array.isArray(listData.result))return json({error:"Respons daftar KV lama tidak valid."},502);
+   const keys=listData.result;
+   const values=await Promise.all(keys.map(async item=>{
+    const valueRes=await fetch(apiBase+"/values/"+encodeURIComponent(item.name),{headers:{"authorization":"Bearer "+env.OLD_CF_API_TOKEN}});
+    if(!valueRes.ok)throw new Error("Gagal membaca salah satu data KV (HTTP "+valueRes.status+").");
+    return {key:item.name,value:await valueRes.text()};
+   }));
+   await Promise.all(values.map(item=>env.SHORTLINKS.put(item.key,item.value)));
+   const nextCursor=listData.result_info && listData.result_info.cursor ? listData.result_info.cursor : null;
+   return json({copied:values.length,done:!nextCursor,cursor:nextCursor});
+  }
   if(request.method==="GET" && url.pathname==="/") return new Response(HTML,{headers:{"content-type":"text/html;charset=UTF-8","x-content-type-options":"nosniff","referrer-policy":"no-referrer","content-security-policy":"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}});
   if(request.method==="POST" && url.pathname==="/api/shorten"){
    let body;try{body=await request.json()}catch{return json({error:"Format permintaan tidak valid."},400)}
