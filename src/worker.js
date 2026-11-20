@@ -3,8 +3,8 @@ const HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Buat tautan pendek dengan tujuan yang tetap terlihat jelas.">
-<title>VLinkGo</title>
+<meta name="description" content="go.vlinkgo.my.id">
+<title>go.vlinkgo.my.id</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f3f5f9;color:#172033;font:16px Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:22px}
 main{width:min(100%,540px);background:#fff;border:1px solid #e5e9f0;border-radius:18px;padding:28px;box-shadow:0 12px 38px #17203312}
@@ -16,8 +16,8 @@ button:disabled{opacity:.6;cursor:wait}.result{display:none;margin-top:20px;padd
 </style>
 </head>
 <body><main>
-<h1>VLinkGo</h1>
-<p>Buat tautan pendek dengan mudah. Alamat tujuan akan ditampilkan agar penerima tahu ke mana tautan mengarah.</p>
+<h1>go.vlinkgo.my.id</h1>
+<p></p>
 <form id="form">
 <label class="field" for="destination">Tempel URL tujuan</label>
 <input id="destination" type="url" placeholder="https://contoh.com/halaman" required maxlength="2048" autocomplete="url">
