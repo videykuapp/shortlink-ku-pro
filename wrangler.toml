@@ -1,4 +1,5 @@
 # Cloudflare Worker deployment configuration for go.vlinkgo.my.id.
+# Trigger deployment after correcting the GitHub Actions account ID.
 name = "shortlink-ku-pro"
 main = "src/worker.js"
 compatibility_date = "2026-11-17"
