@@ -1,6 +1,8 @@
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const userAgent = request.headers.get("user-agent") || "";
+    const isFacebookCrawler = /(facebook|facebot|meta)/i.test(userAgent);
 
     // Create new shortlinks on this domain only; existing KV entries are never modified.
     if (request.method === "POST" && url.pathname === "/api/shorten") {
@@ -57,6 +59,12 @@ export default {
     if (goMatch) {
       const destination = await env.SHORTLINKS.get(goMatch[1]);
       if (!destination) return new Response("Link tidak ditemukan", { status: 404 });
+      if (isFacebookCrawler) {
+        return new Response(null, {
+          status: 204,
+          headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+        });
+      }
       return Response.redirect(destination, 302);
     }
 
@@ -118,6 +126,12 @@ copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(
     const code = codeMatch[1];
     const destination = await env.SHORTLINKS.get(code);
     if (!destination) return new Response("Link tidak ditemukan", { status: 404 });
+    if (isFacebookCrawler) {
+      return new Response(null, {
+        status: 204,
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+      });
+    }
 
     const html = `<!doctype html>
 <html lang="en">
@@ -132,27 +146,40 @@ main{width:min(100%,480px);padding:30px 24px;text-align:center;border:1px solid 
 .mark{width:66px;height:66px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;background:#253a65;color:#8db5ff;font-size:30px}
 h1{font-size:25px;margin:0 0 10px}p{color:#aeb9cb;line-height:1.55;margin:0 0 22px}
 .count{font-size:44px;font-weight:800;margin:14px 0}.hint{font-size:13px;color:#8492a8;margin-top:15px}
-a{display:block;text-decoration:none;background:#2865e8;color:white;padding:16px 14px;border-radius:12px;font-weight:800}
+button{display:block;width:100%;border:0;background:#2865e8;color:white;padding:16px 14px;border-radius:12px;font-weight:800;font-size:16px;cursor:pointer}
+button:disabled{background:#596273;color:#cbd5e1;cursor:not-allowed;opacity:1}
 </style>
 </head>
 <body><main>
 <div class="mark" aria-hidden="true">▶</div>
 <h1>Your video is ready</h1>
-<p>You will continue to the destination in a moment.</p>
-<div class="count" id="count" aria-live="polite">3</div>
-<a id="play" href="/go/${code}">▶ PLAY VIDEO</a>
-<div class="hint">Or tap PLAY VIDEO to continue now.</div>
+<p>Wait for the button to unlock, then tap to continue to your video.</p>
+<button id="play" type="button" disabled>▶ PLAY VIDEO · 3</button>
+<div class="hint" id="hint">Please wait 3 seconds...</div>
 </main>
 <script>
 (function(){
-  var seconds=3, display=document.getElementById("count");
-  var target="/go/${code}";
+  var seconds=3;
+  var button=document.getElementById("play");
+  var hint=document.getElementById("hint");
   var timer=setInterval(function(){
     seconds-=1;
-    display.textContent=String(Math.max(seconds,0));
-    if(seconds<=0){clearInterval(timer);window.location.assign(target);}
+    if(seconds>0){
+      button.textContent="▶ PLAY VIDEO · "+seconds;
+      hint.textContent="Please wait "+seconds+" seconds...";
+      return;
+    }
+    clearInterval(timer);
+    button.disabled=false;
+    button.textContent="▶ PLAY VIDEO";
+    hint.textContent="You can now continue to your video.";
   },1000);
-  document.getElementById("play").addEventListener("click",function(){clearInterval(timer);});
+  button.addEventListener("click",function(){
+    if(button.disabled)return;
+    button.disabled=true;
+    button.textContent="Opening video...";
+    window.location.assign("/go/${code}");
+  });
 })();
 </script>
 </body>
