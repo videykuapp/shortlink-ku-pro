@@ -1,3 +1,5 @@
+// Automatic deployment trigger: production shortlink worker branch.
+// The runtime implementation below is unchanged by this marker.
 const HTML = `<!doctype html>
 <html lang="id">
 <head>
