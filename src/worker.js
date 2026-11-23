@@ -85,7 +85,7 @@ function getSession(request){
 function cookieHeader(session){return "vg_session="+session+"; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax";}
 async function gateRequest(env,path,body){
  if(!env.GATE_TOKENS)throw new Error("GATE_TOKENS binding missing");
- const id=env.GATE_TOKENS.idFromName("vlinkgo-global-gate");
+ const id=env.GATE_TOKENS.idFromName("vlinkgo-gate:"+body.code);
  return env.GATE_TOKENS.get(id).fetch("https://gate.internal"+path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
 }
 async function handleGateStart(request,env,code){
