@@ -120,19 +120,19 @@ export class OneTimeGate {
    const now=Number(body.now)||Date.now();await this.state.storage.put("challenge:"+body.challenge,{code:body.code,session:body.session,createdAt:now,expiresAt:now+60000});return json({ok:true});
   }
   if(url.pathname==="/issue"){
-   const result=await this.state.storage.transaction(async txn=>{
-    const key="challenge:"+body.challenge,record=await txn.get(key),now=Number(body.now)||Date.now();
+   const result=await this.state.storage.transaction(async()=>{
+    const key="challenge:"+body.challenge,record=await this.state.storage.get(key),now=Number(body.now)||Date.now();
     if(!record||record.code!==body.code||record.session!==body.session||record.expiresAt<now)return {error:"Challenge expired. Reload the page."};
     if(now-record.createdAt<3900)return {error:"Please wait and hold the button."};
-    await txn.delete(key);const token=randomToken(32);await txn.put("token:"+token,{code:body.code,session:body.session,expiresAt:now+60000});return {token};
+    await this.state.storage.delete(key);const token=randomToken(32);await this.state.storage.put("token:"+token,{code:body.code,session:body.session,expiresAt:now+60000});return {token};
    });
    return result.error?json({error:result.error},403):json({token:result.token});
   }
   if(url.pathname==="/consume"){
-   const valid=await this.state.storage.transaction(async txn=>{
-    const key="token:"+body.token,record=await txn.get(key),now=Number(body.now)||Date.now();
+   const valid=await this.state.storage.transaction(async()=>{
+    const key="token:"+body.token,record=await this.state.storage.get(key),now=Number(body.now)||Date.now();
     if(!record||record.code!==body.code||record.session!==body.session||record.expiresAt<now)return false;
-    await txn.delete(key);return true;
+    await this.state.storage.delete(key);return true;
    });return json({valid});
   }
   return json({error:"Not found."},404);
