@@ -13,3 +13,6 @@ class_name = "OneTimeGate"
 [exports.OneTimeGate]
 type = "durable-object"
 storage = "sqlite"
+[vars]
+OLD_CF_ACCOUNT_ID = "6b32ccf477cae5b538a755799c17f8ac"
+OLD_CF_NAMESPACE_ID = "1fdaaf6379404c19b823c82532a633e5"
