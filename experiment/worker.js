@@ -18,10 +18,10 @@ export default {
       if (!["http:", "https:"].includes(destination.protocol) || destination.username || destination.password) {
         return Response.json({ error: "Only valid HTTP or HTTPS URLs are allowed." }, { status: 400 });
       }
-      const host = destination.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+      const host = destination.hostname.toLowerCase().replace(/^\[|\]$/g, "");
       if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-          host.endsWith(".internal") || /^(127\\.|10\\.|192\\.168\\.|169\\.254\\.)/.test(host) ||
-          /^172\\.(1[6-9]|2\\d|3[01])\\./.test(host) || host === "::1" ||
+          host.endsWith(".internal") || /^(127\.|10\.|192\.168\.|169\.254\.)/.test(host) ||
+          /^172\.(1[6-9]|2\d|3[01])\./.test(host) || host === "::1" ||
           host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) {
         return Response.json({ error: "That destination address is not allowed." }, { status: 400 });
       }
