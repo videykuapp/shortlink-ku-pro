@@ -1,4 +1,4 @@
-name = "shortlink-ku-pro"
+name = "shortlink-ku-pro-gate-test"
 main = "src/worker.js"
 compatibility_date = "2026-11-17"
 
