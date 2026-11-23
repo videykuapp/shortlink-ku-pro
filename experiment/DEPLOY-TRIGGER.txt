@@ -1,0 +1,2 @@
+Deployment trigger for the isolated vlinkgo-interstitial-test Worker.
+This file does not change the existing production shortlink Worker or KV data.
